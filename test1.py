@@ -27,7 +27,7 @@ try:
     print(f"변화폭: {max(values) - min(values)}")
     
     if max(values) - min(values) < 10:
-        print("\n⚠️  신호 변화가 거의 없습니다!")
+        print("\n신호 변화가 거의 없습니다!")
         print("- 센서가 올바른 채널에 연결되었는지 확인")
         print("- 센서 전원(+, -)이 제대로 연결되었는지 확인")
         print("- 센서가 작동하는지 확인 (LED 있으면 켜져있어야 함)")
