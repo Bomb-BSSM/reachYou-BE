@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from typing import Optional
 import sys
 import os
-import random
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sensors.sensor_reader import SensorManager
@@ -256,34 +255,16 @@ def calculate_total_compatibility(
     
     # 심박수 유사도
     heart_rate_diff = abs(heart_rate1 - heart_rate2)
-    if heart_rate_diff <= 5:
-        heart_rate_score = 100
-    elif heart_rate_diff <= 10:
-        heart_rate_score = 85
-    elif heart_rate_diff <= 15:
-        heart_rate_score = 70
-    elif heart_rate_diff <= 20:
-        heart_rate_score = 55
-    else:
-        heart_rate_score = max(40, 100 - (heart_rate_diff * 2))
+    heart_rate_score = 100-heart_rate_diff*2
     
     # 체온 유사도
     temperature_diff = abs(temperature1 - temperature2)
-    if temperature_diff <= 0.3:
-        temperature_score = 100
-    elif temperature_diff <= 0.6:
-        temperature_score = 85
-    elif temperature_diff <= 1.0:
-        temperature_score = 70
-    elif temperature_diff <= 1.5:
-        temperature_score = 
-    else:
-        temperature_score = max(40, 100 - (temperature_diff * 30))
+    temperature_score = 100-temperature_diff*100
     
     total_score = int(
-        (mbti_score * 0.5) +
-        (heart_rate_score * 0.3) +
-        (temperature_score * 0.2)
+        (mbti_score * 0.2) +
+        (heart_rate_score * 0.5) +
+        (temperature_score * 0.3)
     )
     
     return {
@@ -299,33 +280,29 @@ def calculate_mbti_compatibility(mbti1: str, mbti2: str) -> int:
     MBTI 궁합 점수 계산
     """
     compatibility_map = {
-        "ISTJ": {"ESFP": 95, "ESTP": 90, "ISFJ": 85, "ESTJ": 80},
-        "ISFJ": {"ESFP": 95, "ESTP": 90, "ISTJ": 85, "ESFJ": 80},
-        "INFJ": {"ENFP": 95, "ENTP": 90, "INFP": 85, "ENFJ": 80},
-        "INTJ": {"ENFP": 95, "ENTP": 90, "INTP": 85, "ENTJ": 80},
-        "ISTP": {"ESFJ": 95, "ESTJ": 90, "ISFP": 85, "ESTP": 80},
-        "ISFP": {"ESFJ": 95, "ESTJ": 90, "ISTP": 85, "ESFP": 80},
-        "INFP": {"ENFJ": 95, "ENTJ": 90, "INFJ": 85, "ENFP": 80},
-        "INTP": {"ENFJ": 95, "ENTJ": 90, "INTJ": 85, "ENTP": 80},
-        "ESTP": {"ISFJ": 95, "ISTJ": 90, "ESFP": 85, "ISTP": 80},
-        "ESFP": {"ISTJ": 95, "ISFJ": 90, "ESTP": 85, "ISFP": 80},
-        "ENFP": {"INTJ": 95, "INFJ": 90, "ENFJ": 85, "INFP": 80},
-        "ENTP": {"INTJ": 95, "INFJ": 90, "ENTJ": 85, "INTP": 80},
-        "ESTJ": {"ISFP": 95, "ISTP": 90, "ESFJ": 85, "ISTJ": 80},
-        "ESFJ": {"ISFP": 95, "ISTP": 90, "ESTJ": 85, "ISFJ": 80},
-        "ENFJ": {"INFP": 95, "INTP": 90, "ENFP": 85, "INFJ": 80},
-        "ENTJ": {"INFP": 95, "INTP": 90, "ENTP": 85, "INTJ": 80},
+        "INFJ": {"ENFP": 100, "ENTP": 89, "INFP": 86, "INTJ": 75, "INTP": 86, "ENFJ": 89, "ENTJ": 89, "ISFJ": 50, "ISFP": 61, "ISTJ": 50, "ISTP": 61, "ESFJ": 64, "ESFP": 75, "ESTJ": 64, "ESTP": 75},
+        "INFP": {"ENFJ": 100, "ENTJ": 89, "INFJ": 86, "INTJ": 86, "INTP": 75, "ENFP": 89, "ENTP": 89, "ISFJ": 61, "ISFP": 50, "ISTJ": 61, "ISTP": 50, "ESFJ": 75, "ESFP": 64, "ESTJ": 75, "ESTP": 64},        
+        "ENFJ": {"INFP": 100, "INTP": 100, "INFJ": 89, "INTJ": 89, "ENFP": 100, "ENTP": 100, "ISFJ": 64, "ISFP": 75, "ISTJ": 64, "ISTP": 75, "ESFJ": 100, "ESFP": 89, "ESTJ": 100, "ESTP": 89},        
+        "ENFP": {"INFJ": 100, "INTJ": 100, "INFP": 89, "INTP": 89, "ENFJ": 100, "ENTJ": 100, "ISFJ": 75, "ISFP": 64, "ISTJ": 75, "ISTP": 64, "ESFJ": 89, "ESFP": 100, "ESTJ": 89, "ESTP": 100},        
+        "INTJ": {"ENFP": 100, "ENTP": 100, "INFJ": 75, "INFP": 86, "INTP": 86, "ENFJ": 89, "ENTJ": 89, "ISFJ": 50, "ISFP": 61, "ISTJ": 50, "ISTP": 61, "ESFJ": 64, "ESFP": 75, "ESTJ": 64, "ESTP": 75},        
+        "INTP": {"ENFJ": 100, "ENTJ": 100, "INFJ": 86, "INFP": 75, "INTJ": 86, "ENFP": 89, "ENTP": 89, "ISFJ": 61, "ISFP": 50, "ISTJ": 61, "ISTP": 50, "ESFJ": 75, "ESFP": 64, "ESTJ": 75, "ESTP": 64},        
+        "ENTJ": {"INFP": 100, "INTP": 100, "INFJ": 89, "INTJ": 89, "ENFJ": 100, "ENTP": 100, "ISFJ": 64, "ISFP": 75, "ISTJ": 64, "ISTP": 75, "ESFJ": 100, "ESFP": 89, "ESTJ": 100, "ESTP": 89},        
+        "ENTP": {"INFJ": 100, "INTJ": 100, "INFP": 89, "INTP": 89, "ENFJ": 100, "ENTJ": 100, "ISFJ": 75, "ISFP": 64, "ISTJ": 75, "ISTP": 64, "ESFJ": 89, "ESFP": 100, "ESTJ": 89, "ESTP": 100},        
+        "ISFJ": {"ESFP": 100, "ESTP": 89, "ISFP": 86, "ISTJ": 75, "ISTP": 86, "ESFJ": 89, "ESTJ": 89, "INFJ": 50, "INFP": 61, "INTJ": 50, "INTP": 61, "ENFJ": 64, "ENFP": 75, "ENTJ": 64, "ENTP": 75},
+        "ISFP": {"ESFJ": 100, "ESTJ": 89, "ISFJ": 86, "ISTJ": 86, "ISTP": 75, "ESFP": 89, "ESTP": 89, "INFJ": 61, "INFP": 50, "INTJ": 61, "INTP": 50, "ENFJ": 75, "ENFP": 64, "ENTJ": 75, "ENTP": 64},
+        "ESFJ": {"ISFP": 100, "ISTP": 100, "ISFJ": 89, "ISTJ": 89, "ESFP": 100, "ESTP": 100, "INFJ": 64, "INFP": 75, "INTJ": 64, "INTP": 75, "ENFJ": 100, "ENFP": 89, "ENTJ": 100, "ENTP": 89},        
+        "ESFP": {"ISFJ": 100, "ISTJ": 100, "ISFP": 89, "ISTP": 89, "ESFJ": 100, "ESTJ": 100, "INFJ": 75, "INFP": 64, "INTJ": 75, "INTP": 64, "ENFJ": 89, "ENFP": 100, "ENTJ": 89, "ENTP": 100},        
+        "ISTJ": {"ESFP": 100, "ESTP": 89, "ISFJ": 75, "ISFP": 86, "ISTP": 86, "ESFJ": 89, "ESTJ": 89, "INFJ": 50, "INFP": 61, "INTJ": 50, "INTP": 61, "ENFJ": 64, "ENFP": 75, "ENTJ": 64, "ENTP": 75},        
+        "ISTP": {"ESFJ": 100, "ESTJ": 100, "ISFJ": 86, "ISFP": 75, "ISTJ": 86, "ESFP": 89, "ESTP": 89, "INFJ": 61, "INFP": 50, "INTJ": 61, "INTP": 50, "ENFJ": 75, "ENFP": 64, "ENTJ": 75, "ENTP": 64},        
+        "ESTJ": {"ISFP": 100, "ISTP": 100, "ISFJ": 89, "ISTJ": 89, "ESFJ": 100, "ESTP": 100, "INFJ": 64, "INFP": 75, "INTJ": 64, "INTP": 75, "ENFJ": 100, "ENFP": 89, "ENTJ": 100, "ENTP": 89},        
+        "ESTP": {"ISFJ": 100, "ISTJ": 100, "ISFP": 89, "ISTP": 89, "ESFJ": 100, "ESTJ": 100, "INFJ": 75, "INFP": 64, "INTJ": 75, "INTP": 64, "ENFJ": 89, "ENFP": 100, "ENTJ": 89, "ENTP": 100},
     }
     
     if mbti1 in compatibility_map and mbti2 in compatibility_map[mbti1]:
         return compatibility_map[mbti1][mbti2]
-    
     if mbti1 == mbti2:
-        return 70
-    
-    return random.randint(50, 75)
-
-
+        return 75
+    return 60
 @router.get("/sensor/{user_id}")
 def get_sensor_data(user_id: int, connection = Depends(get_db)):
     """
