@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pymysql
+pydantic
+RPi.GPIO
+adafruit-circuitpython-dht
+adafruit-blinka
+smbus2
+spidev
