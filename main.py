@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from APIRouter import users, compatibility, confessions, couples, fated_match
+from .APIRouter import users, compatibility, confessions, couples, fated_match
 
 app = FastAPI()
 
@@ -12,9 +12,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(users.router)
-# app.include_router(compatibility.router)
-# app.include_router(confessions.router)
-# app.include_router(couples.router)
+app.include_router(compatibility.router)
+app.include_router(confessions.router)
+app.include_router(couples.router)
 app.include_router(fated_match.router)
 
 @app.get("/")
