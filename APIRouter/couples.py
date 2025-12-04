@@ -132,7 +132,6 @@ def update_couple_rating(couple_id: int, rating: RatingUpdate, connection = Depe
             cursor.close()
             raise HTTPException(status_code=404, detail="커플을 찾을 수 없습니다")
         
-        # 별점을 100점 만점으로 환산 (1점=20, 2점=40, 3점=60, 4점=80, 5점=100)
         score = rating.rating * 20
         
         # 점수 업데이트
@@ -221,7 +220,6 @@ def get_couple_detail(couple_id: int, connection = Depends(get_db)):
         
         cursor.close()
         
-        # 점수를 별점으로 환산 (100점=5점, 80점=4점, ...)
         rating = couple[9] // 20
         
         return {

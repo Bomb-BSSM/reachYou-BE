@@ -58,12 +58,6 @@ def calculate_total_compatibility(
     heart_rate1: int, heart_rate2: int,
     temperature1: float, temperature2: float
 ) -> dict:
-    """
-    종합 궁합 점수 계산
-    - MBTI 궁합: 50%
-    - 심박수 유사도: 30%
-    - 체온 유사도: 20%
-    """
     
     mbti_score = calculate_mbti_compatibility(mbti1, mbti2)
     
@@ -72,11 +66,11 @@ def calculate_total_compatibility(
     if heart_rate_diff <= 5:
         heart_rate_score = 100
     elif heart_rate_diff <= 10:
-        heart_rate_score = 85
+        heart_rate_score = 85 + heart_rate_diff - 5
     elif heart_rate_diff <= 15:
-        heart_rate_score = 70
+        heart_rate_score = 70 + heart_rate_diff - 10
     elif heart_rate_diff <= 20:
-        heart_rate_score = 55
+        heart_rate_score = 55 + heart_rate_diff - 15
     else:
         heart_rate_score = max(40, 100 - (heart_rate_diff * 2))
     
@@ -95,9 +89,9 @@ def calculate_total_compatibility(
     
     # 종합 점수
     total_score = int(
-        (mbti_score * 0.5) +
-        (heart_rate_score * 0.3) +
-        (temperature_score * 0.2)
+        (mbti_score * 0.2) +
+        (heart_rate_score * 0.5) +
+        (temperature_score * 0.3)
     )
     
     return {
@@ -269,7 +263,6 @@ def get_mbti_compatibility(mbti1: str, mbti2: str):
 
 @router.get("/mbti-chart")
 def get_mbti_compatibility_chart():
-    """모든 MBTI 궁합 차트 반환"""
     mbti_types = [
         "ISTJ", "ISFJ", "INFJ", "INTJ",
         "ISTP", "ISFP", "INFP", "INTP",
