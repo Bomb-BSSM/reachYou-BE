@@ -11,6 +11,7 @@ class ConfessionCreate(BaseModel):
 
 class ConfessionUpdate(BaseModel):
     status: str  # 'pending', 'accepted', 'rejected'
+    couple_name: Optional[str] = None  # 수락 시 커플명 (선택)
 
 def get_db():
     from config import engine
@@ -237,8 +238,8 @@ def update_confession_status(
             """, (to_user_id,))
             user2 = cursor.fetchone()
             
-            # fated_match의 calculate_total_compatibility 함수 사용
-            from APIRouter.fated_match import calculate_total_compatibility
+            # compatibility 함수 import
+            from .compatibility import calculate_total_compatibility
             
             compatibility = calculate_total_compatibility(
                 user1[0], user2[0],
@@ -246,11 +247,26 @@ def update_confession_status(
                 user1[2] or 36.5, user2[2] or 36.5
             )
             
+            # 커플명 기본값 설정
+            couple_name = update.couple_name
+            if not couple_name:
+                # 커플명이 없으면 자동 생성
+                cursor.execute("SELECT username FROM users WHERE user_id = %s", (from_user_id,))
+                username1 = cursor.fetchone()[0]
+                cursor.execute("SELECT username FROM users WHERE user_id = %s", (to_user_id,))
+                username2 = cursor.fetchone()[0]
+                couple_name = f"{username1} ❤️ {username2}"
+            
             # couple_ranking에 추가
             cursor.execute("""
-                INSERT INTO couple_ranking (user_a_id, user_b_id, score)
-                VALUES (%s, %s, %s)
-            """, (min(from_user_id, to_user_id), max(from_user_id, to_user_id), compatibility['total_score']))
+                INSERT INTO couple_ranking (user_a_id, user_b_id, score, couple_name)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                min(from_user_id, to_user_id), 
+                max(from_user_id, to_user_id), 
+                compatibility['total_score'],
+                couple_name
+            ))
             connection.commit()
         
         # 업데이트된 고백 조회

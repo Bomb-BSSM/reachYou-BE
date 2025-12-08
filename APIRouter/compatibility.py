@@ -135,11 +135,15 @@ def calculate_compatibility_by_users(
         
         cursor.close()
         
+        # Decimal을 float로 변환 (중요!)
+        temperature1 = float(user1[5]) if user1[5] is not None else 36.5
+        temperature2 = float(user2[5]) if user2[5] is not None else 36.5
+        
         # 궁합 계산
         compatibility = calculate_total_compatibility(
             user1[2], user2[2],  # MBTI
             user1[4] or 70, user2[4] or 70,  # 심박수
-            user1[5] or 36.5, user2[5] or 36.5  # 체온
+            temperature1, temperature2  # 체온 (float로 변환됨)
         )
         
         return {
@@ -149,7 +153,7 @@ def calculate_compatibility_by_users(
                 "mbti": user1[2],
                 "profile_image_url": user1[3],
                 "heart_rate": user1[4],
-                "temperature": float(user1[5]) if user1[5] else None
+                "temperature": temperature1
             },
             "user_2": {
                 "user_id": user2[0],
@@ -157,7 +161,7 @@ def calculate_compatibility_by_users(
                 "mbti": user2[2],
                 "profile_image_url": user2[3],
                 "heart_rate": user2[4],
-                "temperature": float(user2[5]) if user2[5] else None
+                "temperature": temperature2
             },
             "compatibility": compatibility
         }

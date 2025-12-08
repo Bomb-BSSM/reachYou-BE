@@ -16,7 +16,6 @@ app.include_router(compatibility.router)
 app.include_router(confessions.router)
 app.include_router(couples.router)
 app.include_router(fated_match.router)
-
 @app.get("/")
 def root():
     return {"message": "FastAPI 서버가 실행중입니다 (reach_you DB 연결)"}
