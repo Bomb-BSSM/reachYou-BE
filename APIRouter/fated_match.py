@@ -181,8 +181,8 @@ def calculate_top_user_ids(
     connection = Depends(get_db)
 ):
     """
-    user_id가 가장 큰 순서대로 N명의 매칭 계산
-    예: max_users=3이면 user_id 23, 22, 21 계산
+    user_id가 가장 큰 순서대로 N명끼리만 매칭 계산
+    예: max_users=3이면 user_id 23, 22, 21끼리만 매칭
     """
     try:
         cursor = connection.cursor()
@@ -200,19 +200,24 @@ def calculate_top_user_ids(
             cursor.close()
             raise HTTPException(status_code=404, detail="사용자가 없습니다")
         
+        # ✅ 핵심 수정: 타겟 유저들의 ID 리스트 생성
+        target_user_ids = [u[0] for u in target_users]
+        
         print(f"\n{'='*60}")
-        print(f"user_id 상위 {max_users}명 매칭 계산")
-        print(f"대상: {[u[0] for u in target_users]}")
+        print(f"user_id 상위 {max_users}명끼리만 매칭 계산")
+        print(f"대상: {target_user_ids}")
         print(f"{'='*60}")
         
-        # 전체 사용자 조회 (매칭 대상)
-        cursor.execute("""
+        # ✅ 핵심 수정: 매칭 대상도 같은 그룹으로 제한
+        placeholders = ','.join(['%s'] * len(target_user_ids))
+        cursor.execute(f"""
             SELECT user_id, mbti, heart_rate, temperature
             FROM users
-        """)
+            WHERE user_id IN ({placeholders})
+        """, target_user_ids)
         all_users = cursor.fetchall()
         
-        # 선택된 사용자들만 매칭 재계산
+        # 선택된 사용자들끼리만 매칭 계산
         updated_count = 0
         for user in target_users:
             user_id = user[0]
@@ -225,9 +230,11 @@ def calculate_top_user_ids(
             
             candidates_with_scores = []
             
+            # ✅ 같은 그룹 내에서만 매칭
             for other_user in all_users:
                 other_id = other_user[0]
                 
+                # 자기 자신 제외
                 if user_id == other_id:
                     continue
                 
@@ -246,8 +253,14 @@ def calculate_top_user_ids(
                     "score": compatibility["total_score"]
                 })
             
+            # ✅ 후보가 없으면 스킵
+            if not candidates_with_scores:
+                print(f"⚠️  사용자 {user_id} ({username}) - 매칭 대상 없음")
+                continue
+            
             candidates_with_scores.sort(key=lambda x: x["score"], reverse=True)
-            top_matches = candidates_with_scores[:2]
+            # ✅ 최대 2명까지만 (후보가 2명 미만일 수도 있음)
+            top_matches = candidates_with_scores[:min(2, len(candidates_with_scores))]
             
             # 기존 매칭 삭제
             cursor.execute("DELETE FROM fated_matches WHERE user_id = %s", (user_id,))
@@ -260,17 +273,18 @@ def calculate_top_user_ids(
                 """, (user_id, match["user_id"], match["score"]))
             
             updated_count += 1
-            print(f"✓ 사용자 {user_id} ({username}) 완료")
+            print(f"✓ 사용자 {user_id} ({username}) 완료 - {len(top_matches)}명 매칭")
         
         connection.commit()
         cursor.close()
         
         return {
             "success": True,
-            "message": f"user_id 상위 {max_users}명의 운명의 상대가 계산되었습니다",
-            "target_user_ids": [u[0] for u in target_users],
+            "message": f"user_id 상위 {max_users}명끼리의 운명의 상대가 계산되었습니다",
+            "target_user_ids": target_user_ids,
             "updated_count": updated_count,
-            "total_users": len(all_users)
+            "group_size": len(all_users),
+            "note": f"{len(all_users)}명 그룹 내에서만 매칭됨"
         }
         
     except HTTPException:
@@ -279,19 +293,23 @@ def calculate_top_user_ids(
         connection.rollback()
         raise HTTPException(status_code=500, detail=f"데이터베이스 오류: {str(e)}")
 
-
 @router.websocket("/ws/measure/{user_id}")
 async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
+    """웹소켓 센서 측정"""
+    print(f"[WebSocket] 연결 시도: user_id={user_id}")
     """
     웹소켓으로 실시간 센서 측정
+    
+    실시간 전송 데이터:
+    - status: 현재 상태 (준비중, 측정중, 완료, 오류)
+    - progress: 진행률 (0-100)
+    - current_value: 현재 센서 값
+    - message: 상태 메시지
+    - result: 최종 측정 결과
     """
-    connection = None
-    cursor = None
-    sensor_manager = None
+    await websocket.accept()
     
     try:
-        await websocket.accept()
-        
         # DB 연결
         from config import engine
         connection = engine.raw_connection()
@@ -306,6 +324,7 @@ async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
                 "status": "error",
                 "message": "사용자를 찾을 수 없습니다"
             })
+            await websocket.close()
             return
         
         username = user[0]
@@ -327,20 +346,8 @@ async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
             "progress": 0
         })
         
+        # 비동기로 센서 측정
         loop = asyncio.get_event_loop()
-        
-        # 센서 매니저 초기화 (비동기로)
-        try:
-            sensor_manager = await loop.run_in_executor(
-                None, 
-                lambda: SensorManager(temp_address=0x3A, heart_channel=0)
-            )
-        except Exception as e:
-            await websocket.send_json({
-                "status": "error",
-                "message": f"센서 초기화 실패: {str(e)}"
-            })
-            return
         
         # 온도 측정
         await websocket.send_json({
@@ -349,26 +356,21 @@ async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
             "progress": 10
         })
         
+        sensor_manager = SensorManager(temp_address=0x3A, heart_channel=0)
+        
+        # 온도 측정 (5회 평균)
         temps = []
         for i in range(5):
-            try:
-                temp = await loop.run_in_executor(
-                    None, 
-                    sensor_manager.read_temperature, 
-                    1
-                )
-                if temp:
-                    temps.append(temp)
-                    await websocket.send_json({
-                        "status": "measuring_temperature",
-                        "message": f"체온 측정 중... ({i+1}/5)",
-                        "progress": 10 + (i+1) * 5,
-                        "current_value": round(temp, 1)
-                    })
-                await asyncio.sleep(0.2)
-            except Exception as e:
-                print(f"체온 측정 오류 (시도 {i+1}): {e}")
-                continue
+            temp = await loop.run_in_executor(None, sensor_manager.read_temperature, 1)
+            if temp:
+                temps.append(temp)
+                await websocket.send_json({
+                    "status": "measuring_temperature",
+                    "message": f"체온 측정 중... ({i+1}/5)",
+                    "progress": 10 + (i+1) * 5,
+                    "current_value": temp
+                })
+            await asyncio.sleep(0.2)
         
         temperature = sum(temps) / len(temps) if temps else 36.5
         
@@ -391,37 +393,31 @@ async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
         # 심박수 측정 (실시간 진행률 전송)
         duration = 15
         samples = []
-        start_time = loop.time()
+        start_time = asyncio.get_event_loop().time()
         
         while True:
-            current_time = loop.time()
+            current_time = asyncio.get_event_loop().time()
             elapsed = current_time - start_time
             
             if elapsed >= duration:
                 break
             
             # 센서 값 읽기
-            try:
-                value = await loop.run_in_executor(
-                    None, 
-                    sensor_manager.heart_sensor.read_adc
-                )
-                samples.append(value)
-                
-                # 진행률 계산 (40% ~ 90%)
-                progress = 40 + int((elapsed / duration) * 50)
-                
-                # 실시간 전송 (0.5초마다)
-                if len(samples) % 50 == 0:
-                    await websocket.send_json({
-                        "status": "measuring_heartrate",
-                        "message": f"심박수 측정 중... {elapsed:.1f}/{duration}초",
-                        "progress": progress,
-                        "current_value": value,
-                        "elapsed": round(elapsed, 1)
-                    })
-            except Exception as e:
-                print(f"심박수 센서 읽기 오류: {e}")
+            value = await loop.run_in_executor(None, sensor_manager.heart_sensor.read_adc)
+            samples.append(value)
+            
+            # 진행률 계산 (40% ~ 90%)
+            progress = 40 + int((elapsed / duration) * 50)
+            
+            # 실시간 전송 (0.5초마다)
+            if len(samples) % 50 == 0:
+                await websocket.send_json({
+                    "status": "measuring_heartrate",
+                    "message": f"심박수 측정 중... {elapsed:.1f}/{duration}초",
+                    "progress": progress,
+                    "current_value": value,
+                    "elapsed": round(elapsed, 1)
+                })
             
             await asyncio.sleep(0.01)
         
@@ -433,29 +429,30 @@ async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
         })
         
         # 심박수 분석
-        heart_rate = 70  # 기본값
-        if samples:
-            mean_value = sum(samples) / len(samples)
-            std_value = (sum((x - mean_value) ** 2 for x in samples) / len(samples)) ** 0.5
-            threshold = mean_value + (std_value * 0.5)
-            
-            beats = 0
-            last_beat_time = 0
-            beat_intervals = []
-            
-            for i, value in enumerate(samples):
-                current_time = i * 0.01
-                if i > 0 and samples[i-1] < threshold and value >= threshold:
-                    if current_time - last_beat_time > 0.3:
-                        beats += 1
-                        if last_beat_time > 0:
-                            interval = current_time - last_beat_time
-                            beat_intervals.append(interval)
-                        last_beat_time = current_time
-            
-            if beats > 1 and beat_intervals:
-                avg_interval = sum(beat_intervals) / len(beat_intervals)
-                heart_rate = int(60 / avg_interval) if avg_interval > 0 else 70
+        mean_value = sum(samples) / len(samples) if samples else 0
+        std_value = (sum((x - mean_value) ** 2 for x in samples) / len(samples)) ** 0.5 if samples else 0
+        threshold = mean_value + (std_value * 0.5)
+        
+        beats = 0
+        last_beat_time = 0
+        beat_intervals = []
+        
+        for i, value in enumerate(samples):
+            current_time = i * 0.01
+            if i > 0 and samples[i-1] < threshold and value >= threshold:
+                if current_time - last_beat_time > 0.3:
+                    beats += 1
+                    if last_beat_time > 0:
+                        interval = current_time - last_beat_time
+                        beat_intervals.append(interval)
+                    last_beat_time = current_time
+        
+        heart_rate = 70
+        if beats > 1 and beat_intervals:
+            avg_interval = sum(beat_intervals) / len(beat_intervals)
+            heart_rate = int(60 / avg_interval) if avg_interval > 0 else 70
+        
+        sensor_manager.close()
         
         # DB 저장
         await websocket.send_json({
@@ -469,7 +466,7 @@ async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
             SET heart_rate = %s, temperature = %s, last_measured_at = NOW()
             WHERE user_id = %s
         """
-        cursor.execute(update_query, (heart_rate, round(temperature, 1), user_id))
+        cursor.execute(update_query, (heart_rate, temperature, user_id))
         connection.commit()
         
         # 완료
@@ -485,43 +482,21 @@ async def websocket_measure_sensor(websocket: WebSocket, user_id: int):
             }
         })
         
+        cursor.close()
+        connection.close()
+        
     except WebSocketDisconnect:
         print(f"웹소켓 연결 끊김: user_id={user_id}")
     except Exception as e:
         print(f"센서 측정 오류: {e}")
-        import traceback
-        traceback.print_exc()
-        try:
-            await websocket.send_json({
-                "status": "error",
-                "message": f"오류 발생: {str(e)}"
-            })
-        except:
-            pass
+        await websocket.send_json({
+            "status": "error",
+            "message": f"오류 발생: {str(e)}"
+        })
     finally:
-        # 리소스 정리
-        if sensor_manager:
-            try:
-                sensor_manager.close()
-            except:
-                pass
-        
-        if cursor:
-            try:
-                cursor.close()
-            except:
-                pass
-        
-        if connection:
-            try:
-                connection.close()
-            except:
-                pass
-        
-        try:
-            await websocket.close()
-        except:
-            pass
+        await websocket.close()
+
+
 @router.post("/measure-sensor/{user_id}")
 def measure_and_update_sensor(user_id: int, auto_calculate: bool = True, connection = Depends(get_db)):
     """실제 센서로 측정 후 DB 업데이트 및 자동 매칭 계산"""
@@ -533,7 +508,6 @@ def measure_and_update_sensor(user_id: int, auto_calculate: bool = True, connect
         if not user:
             cursor.close()
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
-        
         username = user[0]
         print(f"\n{'='*60}")
         print(f"{username} (ID: {user_id})님의 센서 측정 시작")
@@ -624,7 +598,6 @@ def recalculate_user_matches(user_id: int, cursor, connection):
         # 궁합 계산
         candidates = []
         for other_user in other_users:
-            # ✅ 수정: temperature를 float으로 안전하게 변환
             other_temperature = float(other_user[3]) if other_user[3] is not None else 36.5
             compatibility = calculate_total_compatibility(
                 user_mbti, other_user[1],
